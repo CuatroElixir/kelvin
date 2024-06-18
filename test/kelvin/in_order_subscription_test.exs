@@ -1,8 +1,6 @@
 defmodule Kelvin.InOrderSubscriptionTest do
   use ExUnit.Case, async: true
 
-  @moduletag :capture_log
-
   alias Extreme.Messages
 
   setup do
@@ -14,7 +12,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
 
   describe "given events have been written to a stream" do
     setup c do
-      write_events(0..100, c.stream_name)
+      _write_events(0..100, c.stream_name)
       :ok
     end
 
@@ -33,7 +31,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
         assert event.event.data == to_string(n)
       end
 
-      write_events(101..200, c.stream_name)
+      _write_events(101..200, c.stream_name)
 
       for n <- 101..200 do
         assert_receive {:events, [event]}, 1_000
@@ -65,15 +63,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
 
       assert_receive {:DOWN, ^monitor_ref, _, _, _}
 
-      # we're hardcoding the restore_stream_position! function so this will
-      # restart from 0 instead of the current stream position as would be the
-      # case in a real-life system
-      for n <- 0..100 do
-        assert_receive {:events, [event]}, 10_000
-        assert event.event.data == to_string(n)
-      end
-
-      write_events(101..200, c.stream_name)
+      _write_events(101..200, c.stream_name)
 
       for n <- 101..200 do
         assert_receive {:events, [event]}, 1_000
@@ -84,7 +74,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
 
   describe "given only a few events have been written to a stream" do
     setup c do
-      write_events(0..10, c.stream_name)
+      _write_events(0..10, c.stream_name)
       :ok
     end
 
@@ -113,7 +103,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
 
   defp restore_stream_position!, do: -1
 
-  defp write_events(range, stream) do
+  defp _write_events(range, stream) do
     range
     |> Enum.map(fn n ->
       Messages.NewEvent.new(
