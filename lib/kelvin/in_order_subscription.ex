@@ -35,7 +35,7 @@ defmodule Kelvin.InOrderSubscription do
 
   defstruct [
     :config,
-    :subscription,
+    :extreme_listener,
     :self,
     :max_buffer_size,
     demand: 0,
@@ -53,13 +53,36 @@ defmodule Kelvin.InOrderSubscription do
       Keyword.get(
         opts,
         :catch_up_chunk_size,
-        Application.get_env(:kelvin, :catch_up_chunk_size, 256)
+        Application.get_env(:kelvin, :catch_up_chunk_size, 128)
+      )
+
+    connection = Keyword.fetch!(opts, :connection)
+    stream_name = Keyword.fetch!(opts, :stream_name)
+
+    listener_name =
+      opts
+      |> Keyword.get(:name, __MODULE__)
+      |> Module.concat(ExtremeListener)
+
+    {:ok, extreme_listener} =
+      Kelvin.Listener.start_link(connection, stream_name,
+        read_per_page: max_buffer_size,
+        auto_subscribe: false,
+        ack_timeout: :infinity,
+        name: listener_name,
+        producer: self(),
+        get_stream_position_fun: fn ->
+          opts
+          |> Keyword.fetch!(:restore_stream_position!)
+          |> _do_function()
+        end
       )
 
     state = %__MODULE__{
+      extreme_listener: extreme_listener,
       config: Map.new(opts),
       self: Keyword.get(opts, :name, self()),
-      max_buffer_size: max_buffer_size
+      max_buffer_size: max_buffer_size * 2
     }
 
     Process.send_after(
@@ -92,26 +115,10 @@ defmodule Kelvin.InOrderSubscription do
   end
 
   def handle_info(:subscribe, state) do
-    if state.subscription do
-      # coveralls-ignore-start
-      Logger.warn("#{inspect(__MODULE__)} is already subscribed.")
-      # coveralls-ignore-stop
-    else
-      case _subscribe(state) do
-        {:ok, sub} ->
-          Process.link(sub)
-          {:noreply, [], put_in(state.subscription, sub)}
+    Kelvin.Listener.subscribe(state.extreme_listener)
 
-        # coveralls-ignore-start
-        {:error, reason} ->
-          {:stop, reason, state}
-
-          # coveralls-ignore-stop
-      end
-    end
+    {:noreply, [], state}
   end
-
-  def handle_info(_info, state), do: {:noreply, [], state}
 
   @impl GenStage
   def handle_call({:on_event, event}, from, state) do
@@ -160,18 +167,6 @@ defmodule Kelvin.InOrderSubscription do
       {value, buffer} ->
         {value, %{state | buffer: buffer, buffer_size: state.buffer_size - 1}}
     end
-  end
-
-  defp _subscribe(state) do
-    state.config.connection
-    |> Extreme.RequestManager._name()
-    |> GenServer.call(
-      {:read_and_stay_subscribed, self(),
-       {state.config.stream_name,
-        _do_function(state.config.restore_stream_position!) + 1,
-        state.max_buffer_size, true, false, :infinity}},
-      :infinity
-    )
   end
 
   defp _do_function(func) when is_function(func, 0), do: func.()
