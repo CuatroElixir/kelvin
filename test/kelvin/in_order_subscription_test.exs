@@ -1,8 +1,6 @@
 defmodule Kelvin.InOrderSubscriptionTest do
   use ExUnit.Case, async: true
 
-  @moduletag :capture_log
-
   alias Extreme.Messages
 
   setup do
@@ -14,7 +12,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
 
   describe "given events have been written to a stream" do
     setup c do
-      write_events(0..100, c.stream_name)
+      _write_events(0..100, c.stream_name)
       :ok
     end
 
@@ -33,7 +31,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
         assert event.event.data == to_string(n)
       end
 
-      write_events(101..200, c.stream_name)
+      _write_events(101..200, c.stream_name)
 
       for n <- 101..200 do
         assert_receive {:events, [event]}, 1_000
@@ -65,15 +63,7 @@ defmodule Kelvin.InOrderSubscriptionTest do
 
       assert_receive {:DOWN, ^monitor_ref, _, _, _}
 
-      # we're hardcoding the restore_stream_position! function so this will
-      # restart from 0 instead of the current stream position as would be the
-      # case in a real-life system
-      for n <- 0..100 do
-        assert_receive {:events, [event]}, 10_000
-        assert event.event.data == to_string(n)
-      end
-
-      write_events(101..200, c.stream_name)
+      _write_events(101..200, c.stream_name)
 
       for n <- 101..200 do
         assert_receive {:events, [event]}, 1_000
@@ -83,28 +73,41 @@ defmodule Kelvin.InOrderSubscriptionTest do
   end
 
   describe "given only a few events have been written to a stream" do
-    setup c do
-      write_events(0..10, c.stream_name)
-      :ok
-    end
-
     test "a slow subscription catches up", c do
+      total_events = 100
+
       opts = [
         producer_name: c.producer_name,
         stream_name: c.stream_name,
         restore_stream_position!: &restore_stream_position!/0,
         test_proc: self(),
         # note how we add an artificial bottleneck to the consumer here
-        sleep_time: 100,
+        sleep_time: 10,
         # and tune down the catch-up (and therefore max buffer queue size)
-        catch_up_chunk_size: 1
+        catch_up_chunk_size: 1,
+        subscribe_after: 1
         # in order to simulate a consumer which is slow and get coverage
         # on the supply-buffering we do with the queue
       ]
 
       start_supervised!({MyInOrderSupervisor, opts})
 
-      for n <- 0..10 do
+      spawn(fn ->
+        Process.sleep(200)
+        _write_events(0..total_events, c.stream_name)
+      end)
+
+      for n <- 0..total_events do
+        assert_receive {:events, [event]}, 6_000
+        assert event.event.data == to_string(n)
+      end
+
+      spawn(fn ->
+        Process.sleep(200)
+        _write_events(0..total_events, c.stream_name)
+      end)
+
+      for n <- 0..total_events do
         assert_receive {:events, [event]}, 6_000
         assert event.event.data == to_string(n)
       end
@@ -113,19 +116,23 @@ defmodule Kelvin.InOrderSubscriptionTest do
 
   defp restore_stream_position!, do: -1
 
-  defp write_events(range, stream) do
+  defp _write_events(range, stream) do
     range
     |> Enum.map(fn n ->
-      Messages.NewEvent.new(
-        event_id: Extreme.Tools.generate_uuid(),
-        event_type: "kelvin_test_event",
-        data_content_type: 1,
-        metadata_content_type: 1,
-        # valid JSON
-        data: to_string(n),
-        metadata: "{}"
-      )
+      Process.sleep(5)
+
+      [
+        Messages.NewEvent.new(
+          event_id: Extreme.Tools.generate_uuid(),
+          event_type: "kelvin_test_event",
+          data_content_type: 1,
+          metadata_content_type: 1,
+          # valid JSON
+          data: to_string(n),
+          metadata: "{}"
+        )
+      ]
+      |> ExtremeClient.append_events(stream)
     end)
-    |> ExtremeClient.append_events(stream)
   end
 end
