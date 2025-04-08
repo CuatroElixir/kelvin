@@ -18,5 +18,5 @@ defmodule Kelvin.Listener do
 
   @impl Extreme.ListenerWithBackPressure
   def process_push(push, _stream_name, %{} = state),
-    do: GenServer.call(state.producer, {:on_event, push})
+    do: GenServer.call(state.producer, {:on_event, push}, :infinity)
 end
