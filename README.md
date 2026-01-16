@@ -1,6 +1,6 @@
 # Kelvin
 
-![Actions CI](https://github.com/NFIBrokerage/kelvin/workflows/Actions%20CI/badge.svg)
+![Actions CI](https://github.com/CuatroElixir/kelvin/workflows/Actions%20CI/badge.svg)
 
 GenStage/Broadway producers for Extreme
 
