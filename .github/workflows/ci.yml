@@ -152,7 +152,6 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag: ${{ env.TAG }}
         title: Release ${{ env.TAG }}
         prerelease: false
 
