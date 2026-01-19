@@ -1,7 +1,7 @@
 defmodule Kelvin.MixProject do
   use Mix.Project
 
-  @source_url "https://github.com/NFIBrokerage/kelvin"
+  @source_url "https://github.com/CuatroElixir/kelvin"
   @version_file Path.join(__DIR__, ".version")
   @external_resource @version_file
   @version (case Regex.run(~r/^v([\d\.\w-]+)/, File.read!(@version_file),
@@ -73,9 +73,6 @@ defmodule Kelvin.MixProject do
 
   defp docs do
     [
-      # do you reference other projects in your documentation? if so, add
-      # them to the :deps key here. for an example, see
-      # https://github.com/NFIBrokerage/projection/blob/5f406872d00156e2b94cfa9fae8e92a1aa4c177b/mix.exs#L88-L90
       deps: [],
       extras: [
         "CHANGELOG.md"
